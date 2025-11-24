@@ -25,69 +25,129 @@ local function IsInWarzone(coords)
 	return #(coords - warzoneCoords) <= warzoneRadius
 end
 
+local deathUIState = {
+        visible = false,
+        timeLeft = 0,
+        canRespawn = false
+}
+
+local function DrawAdvancedText(x, y, scale, text, r, g, b, a, font, center)
+        SetTextFont(font or 4)
+        SetTextScale(scale, scale)
+        SetTextColour(r, g, b, a or 255)
+        SetTextDropshadow(0, 0, 0, 0, 255)
+        SetTextEdge(1, 0, 0, 0, 255)
+        SetTextOutline()
+        SetTextCentre(center or false)
+        SetTextEntry("STRING")
+        AddTextComponentString(text)
+        DrawText(x, y)
+end
+
+local function ShowCustomDeathUI(timeLeft, respawnReady)
+        deathUIState.visible = true
+        deathUIState.timeLeft = math.max(0, timeLeft or 0)
+        deathUIState.canRespawn = respawnReady or false
+end
+
+local function HideCustomDeathUI()
+        deathUIState.visible = false
+end
+
+local function UpdateDeathTimer(timeLeft, respawnReady)
+        deathUIState.timeLeft = math.max(0, timeLeft or deathUIState.timeLeft)
+        if respawnReady ~= nil then
+                deathUIState.canRespawn = respawnReady
+        end
+end
+
+CreateThread(function()
+        while true do
+                if deathUIState.visible then
+                        Wait(0)
+
+                        local accentR, accentG, accentB = 255, 75, 90
+                        local backgroundAlpha = 170
+
+                        DrawRect(0.5, 0.18, 0.26, 0.11, 0, 0, 0, backgroundAlpha)
+                        DrawRect(0.5, 0.12, 0.26, 0.005, accentR, accentG, accentB, 210)
+                        DrawRect(0.5, 0.24, 0.26, 0.005, 255, 255, 255, 35)
+
+                        DrawAdvancedText(0.5, 0.135, 0.7, "VOUS ÊTES INCONSCIENT", accentR, accentG, accentB, 255, 4, true)
+
+                        local timerText = string.format("Respawn dans %ds", math.floor(deathUIState.timeLeft))
+                        if deathUIState.canRespawn then
+                                timerText = "Respawn disponible"
+                        end
+                        DrawAdvancedText(0.5, 0.175, 0.5, timerText, 255, 255, 255, 230, 0, true)
+
+                        local actionText = deathUIState.canRespawn and "Appuyez sur ~r~E~s~ pour revenir en safezone" or "Attendez ou demandez de l'aide"
+                        DrawAdvancedText(0.5, 0.215, 0.45, actionText, 210, 210, 210, 255, 0, true)
+                else
+                        Wait(500)
+                end
+        end
+end)
+
 local function HandleRespawnRequest(coords)
-	if autoRespawnActive then
-		return
-	end
+        if autoRespawnActive then
+                return
+        end
 
-	autoRespawnActive = true
+        autoRespawnActive = true
 
-	-- Cacher l'interface de mort via l'export de redzone
-	if exports['Zens-redzone'] then
-		exports['Zens-redzone']:HideDeathUI()
-	else
-		TriggerEvent('redzone:hideDeathUI')
-	end
+        -- Cacher l'interface de mort
+        HideCustomDeathUI()
 
-	-- RÉINITIALISER L'ÉTAT IMMÉDIATEMENT (AVANT TOUT)
-	isDowned = false
-	canRespawn = false
-	justRespawned = true
+        -- RÉINITIALISER L'ÉTAT IMMÉDIATEMENT (AVANT TOUT)
+        isDowned = false
+        canRespawn = false
+        justRespawned = true
 
-	-- NOTIFIER LE SCRIPT NO_MELEE QUE LE JOUEUR EST VIVANT
-	TriggerEvent('revive:playerRevived')
+        -- NOTIFIER LE SCRIPT NO_MELEE QUE LE JOUEUR EST VIVANT
+        TriggerEvent('revive:playerRevived')
 
-	-- ACTIVER LE FORÇAGE DES CONTRÔLES
-	forceEnableControls = true
+        -- ACTIVER LE FORÇAGE DES CONTRÔLES
+        forceEnableControls = true
 
-	-- Thread pour désactiver le forçage après 10 secondes
-	CreateThread(function()
-		Wait(10000)
-		forceEnableControls = false
-	end)
+        -- Thread pour désactiver le forçage après 10 secondes
+        CreateThread(function()
+                Wait(10000)
+                forceEnableControls = false
+        end)
 
-	-- Désactiver la protection après 3 secondes
-	CreateThread(function()
-		Wait(3000)
-		justRespawned = false
-	end)
+        -- Désactiver la protection après 3 secondes
+        CreateThread(function()
+                Wait(3000)
+                justRespawned = false
+        end)
 
-	-- FORCER LA RÉACTIVATION TOTALE DU JOUEUR (CRITIQUE)
-	SetPlayerControl(PlayerId(), true, 0)
+        -- FORCER LA RÉACTIVATION TOTALE DU JOUEUR (CRITIQUE)
+        SetPlayerControl(PlayerId(), true, 0)
 
-	-- RÉACTIVER TOUS LES CONTRÔLES IMMÉDIATEMENT
-	for i = 0, 350 do
-		EnableControlAction(0, i, true)
-		EnableControlAction(1, i, true)
-		EnableControlAction(2, i, true)
-	end
+        -- RÉACTIVER TOUS LES CONTRÔLES IMMÉDIATEMENT
+        for i = 0, 350 do
+                EnableControlAction(0, i, true)
+                EnableControlAction(1, i, true)
+                EnableControlAction(2, i, true)
+        end
 
-	local playerPed = PlayerPedId()
+        local playerPed = PlayerPedId()
 
-	-- NETTOYAGE COMPLET
-	DetachEntity(playerPed, true, false)
-	ClearPedSecondaryTask(playerPed)
-	ClearPedTasksImmediately(playerPed)
-	FreezeEntityPosition(playerPed, false)
-	SetEntityInvincible(playerPed, false)
-	SetPlayerInvincible(PlayerId(), false)
-	SetEntityCollision(playerPed, true, true)
+        -- NETTOYAGE COMPLET
+        DetachEntity(playerPed, true, false)
+        ClearPedSecondaryTask(playerPed)
+        ClearPedTasksImmediately(playerPed)
+        FreezeEntityPosition(playerPed, false)
+        SetEntityInvincible(playerPed, false)
+        SetPlayerInvincible(PlayerId(), false)
+        SetEntityCollision(playerPed, true, true)
 
-	-- Notifier le serveur d'arrêter tout carry en cours
-	TriggerServerEvent('carry:forceStop')
+        -- Notifier le serveur d'arrêter tout carry en cours
+        TriggerServerEvent('carry:forceStop')
 
-	-- Demander la téléportation à la safezone
-	TriggerServerEvent('revive:getClosestSafezone', coords)
+        -- Demander la téléportation à la safezone
+        TriggerServerEvent('revive:getClosestSafezone', coords)
 end
 
 RegisterNetEvent('revive:revivePlayer')
@@ -95,12 +155,8 @@ AddEventHandler('revive:revivePlayer', function(byOtherPlayer)
 	local playerPed = PlayerPedId()
 	local coords = GetEntityCoords(playerPed)
 	
-	-- Cacher l'interface de mort via l'export de redzone
-	if exports['Zens-redzone'] then
-		exports['Zens-redzone']:HideDeathUI()
-	else
-		TriggerEvent('redzone:hideDeathUI')
-	end
+        -- Cacher l'interface de mort
+        HideCustomDeathUI()
 	
 	-- RÉINITIALISER L'ÉTAT IMMÉDIATEMENT (STOPPE LE THREAD DE CONTRÔLE)
 	isDowned = false
@@ -170,12 +226,8 @@ AddEventHandler('revive:revivePlayer', function(byOtherPlayer)
 		SetEntityHealth(playerPed, 200)
 		ClearPedBloodDamage(playerPed)
 		
-		-- Cacher l'interface de mort une deuxième fois après la résurrection
-		if exports['Zens-redzone'] then
-			exports['Zens-redzone']:HideDeathUI()
-		else
-			TriggerEvent('redzone:hideDeathUI')
-		end
+                -- Cacher l'interface de mort une deuxième fois après la résurrection
+                HideCustomDeathUI()
 		
 		-- RÉACTIVER ENCORE UNE FOIS LES CONTRÔLES (TOUS LES GROUPES)
 		for i = 0, 350 do
@@ -209,12 +261,8 @@ AddEventHandler('revive:teleportToSafezone', function(safezoneCoords)
 	autoRespawnActive = false
 	local playerPed = PlayerPedId()
 	
-	-- Cacher l'interface de mort via l'export de redzone
-	if exports['Zens-redzone'] then
-		exports['Zens-redzone']:HideDeathUI()
-	else
-		TriggerEvent('redzone:hideDeathUI')
-	end
+        -- Cacher l'interface de mort
+        HideCustomDeathUI()
 	
 	-- RÉINITIALISER L'ÉTAT TOUT DE SUITE (CRITIQUE)
 	isDowned = false
@@ -502,19 +550,11 @@ CreateThread(function()
 			-- Notifier le serveur pour le loot
 			TriggerServerEvent('loot:server:registerDeath', deathCoords)
 			
-			-- Afficher l'interface de mort via l'export de redzone
-			local timeLeft = math.ceil((maxDownTime - (GetGameTimer() - deathTime)) / 1000)
-			print('[REVIVE] Mort détectée, affichage interface. TimeLeft:', timeLeft)
-			
-			-- Utiliser l'export de Zens-redzone
-			if exports['Zens-redzone'] then
-				exports['Zens-redzone']:ShowDeathUI(timeLeft, false)
-				print('[REVIVE] Export ShowDeathUI appelé')
-			else
-				-- Fallback: utiliser l'event réseau
-				TriggerEvent('redzone:showDeathUI', timeLeft, false)
-				print('[REVIVE] Event redzone:showDeathUI déclenché')
-			end
+                        -- Afficher l'interface de mort modernisée
+                        local timeLeft = math.ceil((maxDownTime - (GetGameTimer() - deathTime)) / 1000)
+                        print('[REVIVE] Mort détectée, affichage interface personnalisée. TimeLeft:', timeLeft)
+
+                        ShowCustomDeathUI(timeLeft, false)
 
 			if not IsInWarzone(deathCoords) then
 				CreateThread(function()
@@ -539,14 +579,10 @@ CreateThread(function()
 		-- SI FORÇAGE ACTIF, TOUJOURS RÉACTIVER LES CONTRÔLES
 		if forceEnableControls then
 			Wait(0) -- Réactif pendant le forçage
-			-- Cacher l'interface de mort si le joueur vient d'être réanimé
-			if justRespawned then
-				if exports['Zens-redzone'] then
-					exports['Zens-redzone']:HideDeathUI()
-				else
-					TriggerEvent('redzone:hideDeathUI')
-				end
-			end
+                        -- Cacher l'interface de mort si le joueur vient d'être réanimé
+                        if justRespawned then
+                                HideCustomDeathUI()
+                        end
 			for i = 0, 350 do
 				EnableControlAction(0, i, true)
 				EnableControlAction(1, i, true)
@@ -573,23 +609,13 @@ CreateThread(function()
 				DisableAllControlActions(0)
 			end
 			
-			-- Afficher l'interface NUI au lieu du texte via l'export de redzone
-			if exports['Zens-redzone'] then
-				if not canRespawn then
-					exports['Zens-redzone']:ShowDeathUI(timeLeft, false)
-					exports['Zens-redzone']:UpdateDeathTimer(timeLeft, false)
-				else
-					exports['Zens-redzone']:UpdateDeathTimer(0, true)
-				end
-			else
-				-- Fallback: utiliser les events réseau
-				if not canRespawn then
-					TriggerEvent('redzone:showDeathUI', timeLeft, false)
-					TriggerEvent('redzone:updateDeathTimer', timeLeft, false)
-				else
-					TriggerEvent('redzone:updateDeathTimer', 0, true)
-				end
-			end
+                        -- Afficher l'interface moderne
+                        if not canRespawn then
+                                ShowCustomDeathUI(timeLeft, false)
+                                UpdateDeathTimer(timeLeft, false)
+                        else
+                                UpdateDeathTimer(0, true)
+                        end
 			
 			-- Si le joueur peut respawn et appuie sur E
 			if canRespawn and IsControlJustPressed(0, 38) then -- E
